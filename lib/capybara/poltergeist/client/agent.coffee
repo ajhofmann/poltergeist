@@ -10,12 +10,6 @@ class PoltergeistAgent
     catch error
       { error: { message: error.toString(), stack: error.stack } }
 
-  # Somehow PhantomJS returns all characters(brackets, etc) properly encoded
-  # except whitespace character in pathname part of the location. This hack
-  # is intended to fix this up.
-  currentUrl: ->
-    window.location.href.replace(/\ /g, '%20')
-
   find: (method, selector, within = document) ->
     try
       if method == "xpath"
@@ -48,11 +42,13 @@ class PoltergeistAgent
     throw new PoltergeistAgent.ObsoleteNode if node.isObsolete()
     node[name].apply(node, args)
 
-  beforeUpload: (id) ->
+  beforeAction: (id, name) ->
     this.get(id).setAttribute('_poltergeist_selected', '')
+    true
 
-  afterUpload: (id) ->
+  afterAction: (id) ->
     this.get(id).removeAttribute('_poltergeist_selected')
+    true
 
   clearLocalStorage: ->
     localStorage?.clear()
@@ -119,46 +115,30 @@ class PoltergeistAgent.Node
     obsolete @element
 
   changed: ->
-    event = document.createEvent('HTMLEvents')
-    event.initEvent('change', true, false)
-
+    event = new Event 'change', bubbles: true, cancelable: false
     # In the case of an OPTION tag, the change event should come
     # from the parent SELECT
-    if @element.nodeName == 'OPTION'
+    element = if @element.nodeName == 'OPTION'
       element = @element.parentNode
       element = element.parentNode if element.nodeName == 'OPTGROUP'
       element
     else
-      element = @element
+      @element
 
     element.dispatchEvent(event)
 
   input: ->
-    event = document.createEvent('HTMLEvents')
-    event.initEvent('input', true, false)
+    event = new InputEvent('input')
     @element.dispatchEvent(event)
 
   keyupdowned: (eventName, keyCode) ->
-    event = document.createEvent('UIEvents')
-    event.initEvent(eventName, true, true)
-    event.keyCode  = keyCode
-    event.which    = keyCode
-    event.charCode = 0
+    event = new KeyboardEvent(eventName, keyCode: keyCode)
     @element.dispatchEvent(event)
 
   keypressed: (altKey, ctrlKey, shiftKey, metaKey, keyCode, charCode) ->
-    event = document.createEvent('UIEvents')
-    event.initEvent('keypress', true, true)
-    event.window   = @agent.window
-    event.altKey   = altKey
-    event.ctrlKey  = ctrlKey
-    event.shiftKey = shiftKey
-    event.metaKey  = metaKey
-    event.keyCode  = keyCode
-    event.charCode = charCode
-    event.which    = keyCode
+    event = new KeyboardEvent 'keyPress',{ window: @agent.window,
+      altKey, ctrlKey, shiftKey, metaKey, keyCode, charCode }
     @element.dispatchEvent(event)
-
   insideBody: ->
     @element == document.body ||
     document.evaluate('ancestor::body', @element, null, XPathResult.BOOLEAN_TYPE, null).booleanValue
@@ -182,6 +162,7 @@ class PoltergeistAgent.Node
     window.getSelection().removeAllRanges()
     window.getSelection().addRange(range)
     window.getSelection().deleteFromDocument()
+    window.getSelection().removeAllRanges()
 
   getProperty: (name) ->
     @element[name]
@@ -200,10 +181,6 @@ class PoltergeistAgent.Node
 
   scrollIntoView: ->
     @element.scrollIntoViewIfNeeded()
-    #Sometimes scrollIntoViewIfNeeded doesn't seem to work, not really sure why.
-    #Just calling scrollIntoView doesnt work either, however calling scrollIntoView
-    #after scrollIntoViewIfNeeded when element is not in the viewport does appear to work
-    @element.scrollIntoView() unless this.isInViewport()
 
   value: ->
     if @element.tagName == 'SELECT' && @element.multiple
@@ -240,6 +217,7 @@ class PoltergeistAgent.Node
 
   setAttribute: (name, value) ->
     @element.setAttribute(name, value)
+    value
 
   removeAttribute: (name) ->
     @element.removeAttribute(name)
@@ -307,6 +285,7 @@ class PoltergeistAgent.Node
     return false if !selectedNode
 
     if selectedNode.nodeType == 3
+      console.log "getting parentNode"
       selectedNode = selectedNode.parentNode
 
     @element.contains(selectedNode)
@@ -343,34 +322,31 @@ class PoltergeistAgent.Node
     pos
 
   trigger: (name, element = @element) ->
-    if Node.EVENTS.MOUSE.indexOf(name) != -1
-      event = document.createEvent('MouseEvent')
-      event.initMouseEvent(
-        name, true, true, window, 0, 0, 0, 0, 0,
-        false, false, false, false, 0, null
-      )
-    else if Node.EVENTS.FOCUS.indexOf(name) != -1
-      event = this.obtainEvent(name)
-    else if Node.EVENTS.FORM.indexOf(name) != -1
-      event = this.obtainEvent(name)
+    if name in Node.EVENTS.MOUSE
+      event = new MouseEvent name,
+        bubbles: true
+        cancelable: true
+        view: window
+    else if name in Node.EVENTS.FOCUS
+      event = new FocusEvent name,
+        bubbles: true
+        cancelable: true
+    else if name in  Node.EVENTS.FORM
+      event = new Event name,
+        bubbles: true
+        cancelable: true
     else
       throw "Unknown event"
 
     element.dispatchEvent(event)
 
-  obtainEvent: (name) ->
-    event = document.createEvent('HTMLEvents')
-    event.initEvent(name, true, true)
-    event
-
   mouseEventTest: (x, y) ->
-    frameOffset = this.frameOffset()
+    frameOffset = @frameOffset()
 
     x -= frameOffset.left
     y -= frameOffset.top
 
     el = origEl = document.elementFromPoint(x, y)
-
     while el
       if el == @element
         return { status: 'success' }

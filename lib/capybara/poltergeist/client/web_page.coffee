@@ -1,29 +1,41 @@
+node = require("./node.js")
+fs = require('fs')
+
+tab_id = 0
 class Poltergeist.WebPage
-  @CALLBACKS = ['onConsoleMessage','onError',
-                'onLoadFinished', 'onInitialized', 'onLoadStarted',
-                'onResourceRequested', 'onResourceReceived', 'onResourceError',
+  @CALLBACKS = ['onLoadFinished', 'onInitialized', 'onLoadStarted',
+                'onResourceReceived',
                 'onNavigationRequested', 'onUrlChanged', 'onPageCreated',
-                'onClosing']
+                'onClosing', 'request', 'requestfinished', 'requestfailed', 'response',
+                'error', 'pageerror', 'console', 'framenavigated', 'frameattached', 'load']
 
-  @DELEGATES = ['open', 'sendEvent', 'uploadFile', 'render', 'close',
-                'renderBase64', 'goBack', 'goForward', 'reload']
+  @PAGE_DELEGATES = ['goto', 'render', 'close', 'goBack', 'goForward', 'reload']
 
-  @COMMANDS  = ['currentUrl', 'find', 'nodeCall', 'documentSize',
-                'beforeUpload', 'afterUpload', 'clearLocalStorage']
+  @COMMANDS  = ['find', 'nodeCall', 'documentSize', 'beforeAction', 'afterAction', 'clearLocalStorage']
 
   @EXTENSIONS = []
 
-  constructor: (@_native) ->
-    @_native or= require('webpage').create()
+  for command in @COMMANDS
+    do (command) =>
+      WebPage.prototype[command] = (args...)->
+        this.runCommand(command, args)
 
-    @id              = 0
+  for delegate in @PAGE_DELEGATES
+    do (delegate) =>
+      WebPage.prototype[delegate] = ->
+        @_native[delegate]?.apply(@_native, arguments)
+
+  constructor: (@_native) ->
+    @id              = ++tab_id
     @source          = null
     @closed          = false
     @state           = 'default'
+    @frames          = []
     @urlWhitelist    = []
     @urlBlacklist    = []
     @errors          = []
     @_networkTraffic = {}
+    @_customHeaders  = {}
     @_tempHeaders    = {}
     @_blockedUrls    = []
     @_requestedResources = {}
@@ -31,114 +43,118 @@ class Poltergeist.WebPage
     @_tempHeadersToRemoveOnRedirect = {}
 
     for callback in WebPage.CALLBACKS
-      this.bindCallback(callback)
+      @bindCallback(callback)
 
-    if phantom.version.major < 2
-      @._overrideNativeEvaluate()
+  initialize: ->
+    Promise.all(
+      for filePath in ["./lib/capybara/poltergeist/client/compiled/agent.js", WebPage.EXTENSIONS...]
+        @_add_injection(filePath).then (contents)=>
+          @currentFrame().evaluate(contents)
+    ).then =>
+      @native().setRequestInterceptionEnabled(true).then ->
+        return true
 
-  for command in @COMMANDS
-    do (command) =>
-      this.prototype[command] =
-        (args...) -> this.runCommand(command, args)
-
-  for delegate in @DELEGATES
-    do (delegate) =>
-      this.prototype[delegate] =
-        -> @_native[delegate].apply(@_native, arguments)
-
-  onInitializedNative: ->
-    @id += 1
-    @source = null
-    @injectAgent()
-    @removeTempHeaders()
-    @removeTempHeadersForRedirect()
-    @setScrollPosition(left: 0, top: 0)
+  # onInitializedNative: ->
+  #   @id += 1
+  #   @source = null
+  #   @removeTempHeaders()
+  #   @removeTempHeadersForRedirect()
+  #   @setScrollPosition(left: 0, top: 0)
 
   onClosingNative: ->
     @handle = null
     @closed = true
 
-  onConsoleMessageNative: (message) ->
+  on_console: (message, args...) ->
     if message == '__DOMContentLoaded'
-      @source = @_native.content
-      false
+      # @source = @_native.content
+      # false
     else
       console.log(message)
 
-  onLoadStartedNative: ->
-    @state = 'loading'
-    @requestId = @lastRequestId
-    @_requestedResources = {}
+  on_pageerror: (message)->
+    # Puppeteer doesn't seem to provide the stack
+    #   stackString = message
+    #
+    #   stack.forEach (frame) ->
+    #     stackString += "\n"
+    #     stackString += "    at #{frame.file}:#{frame.line}"
+    #     stackString += " in #{frame.function}" if frame.function && frame.function != ''
+    #
+    @errors.push(message: message.toString(), stack: message.toString())
+    true
 
-  onLoadFinishedNative: (@status) ->
+  on_error: (error)->
+    @errors.push(message: error.message.toString(), stack: error.stack.toString())
+    true
+
+  on_framenavigated: (frame)->
+    if frame._id == @currentFrame()._id
+      @state = 'loading'
+      @requestId = @lastRequestId
+      @_requestedResources = {}
+    true
+
+  on_load: ->
     @state = 'default'
-    @source or= @_native.content
+    @id = ++tab_id
+    # @source or= @_native.content
 
-  onErrorNative: (message, stack) ->
-    stackString = message
+  # onLoadFinishedNative: (@status) ->
+  #   @state = 'default'
+  #   @source or= @_native.content
 
-    stack.forEach (frame) ->
-      stackString += "\n"
-      stackString += "    at #{frame.file}:#{frame.line}"
-      stackString += " in #{frame.function}" if frame.function && frame.function != ''
-
-    @errors.push(message: message, stack: stackString)
-    return true
-
-  onResourceRequestedNative: (request, net) ->
-    @_networkTraffic[request.id] = {
+  on_request: (request) ->
+    @_networkTraffic[request._requestId] = {
       request:       request,
       responseParts: []
       error: null
     }
 
     if @_blockRequest(request.url)
-      @_networkTraffic[request.id].blocked = true
+      @_networkTraffic[request._requestId].blocked = true
       @_blockedUrls.push request.url unless request.url in @_blockedUrls
-
-      net.abort()
+      request.abort()
     else
-      @lastRequestId = request.id
+      @lastRequestId = request._requestId
 
-      if @normalizeURL(request.url) == @redirectURL
-        @removeTempHeadersForRedirect()
-        @redirectURL = null
-        @requestId   = request.id
+      # @normalizeURL(request.url).then (url)=>
+      #   if (url == @redirectURL)
+      #     @removeTempHeadersForRedirect()
+      #     @redirectURL = null
+      #     @requestId   = request._requestId
 
-      @_requestedResources[request.id] = request.url
+      @_requestedResources[request._requestId] = request.url
+      request.continue()
     return true
 
-  onResourceReceivedNative: (response) ->
-    @_networkTraffic[response.id]?.responseParts.push(response)
+  on_response: (response) ->
+    @_networkTraffic[response.request._requestId]?.responseParts.push(response)
 
-    if response.stage == 'end'
-      delete @_requestedResources[response.id]
+    return true
 
-    if @requestId == response.id
-      if response.redirectURL
+  on_requestfinished: (request) ->
+    @_networkTraffic[request._requestId]?.responseParts.push(request.response())
+
+    delete @_requestedResources[request.requestId]
+
+    if @requestId == request._requestId
+      if request.response().redirectURL
         @removeTempHeadersForRedirect()
-        @redirectURL = @normalizeURL(response.redirectURL)
+        # @normalizeURL(response.redirectURL).then (url)=>
+        #   @redirectURL = url
       else
-        @statusCode = response.status
-        @_responseHeaders = response.headers
+        @statusCode = request.response().status
+        @_responseHeaders = request.response().headers
+
+  on_requestfailed: (request) ->
+    @_networkTraffic[request._requestId]?.error = request
+    delete @_requestedResources[request._requestId]
     return true
 
-  onResourceErrorNative: (errorResponse) ->
-    @_networkTraffic[errorResponse.id]?.error = errorResponse
-    delete @_requestedResources[errorResponse.id]
-    return true
-
-  injectAgent: ->
-    if this.native().evaluate(-> typeof __poltergeist) == "undefined"
-      this.native().injectJs "#{phantom.libraryPath}/agent.js"
-      for extension in WebPage.EXTENSIONS
-        this.native().injectJs extension
-      return true
-    return false
-
-  injectExtension: (file) ->
-    WebPage.EXTENSIONS.push file
-    this.native().injectJs file
+  injectExtension: (filePath) ->
+    WebPage.EXTENSIONS.push filePath
+    @_add_injection(filePath)
 
   native: ->
     if @closed
@@ -146,21 +162,29 @@ class Poltergeist.WebPage
     else
       @_native
 
+  currentUrl: ->
+    # Puppeteer url doesn't reflect
+    # @native().url()
+    @currentFrame().evaluate ->
+      window.location.href
+
+  currentFrame: ->
+    @frames[@frames.length-1] || @native().mainFrame()
+
+  uploadFile: (selector, file_paths...)->
+    @currentFrame().$(selector).then (eh)->
+      eh.uploadFile(file_paths...)
+
   windowName: ->
-    this.native().windowName
-
-  keyCode: (name) ->
-    name = "Control" if name == "Ctrl"
-    this.native().event.key[name]
-
-  keyModifierCode: (names) ->
-    modifiers = this.native().event.modifier
-    names.split(',').map((name) -> modifiers[name]).reduce((n1,n2) -> n1 | n2)
+    @native().windowName
 
   keyModifierKeys: (names) ->
     for name in names.split(',') when name isnt 'keypad'
       name = name.charAt(0).toUpperCase() + name.substring(1)
-      this.keyCode(name)
+      if name == "Ctrl"
+        "Control"
+      else
+        name
 
   _waitState_until: (states, callback, timeout, timeout_callback) ->
     if (@state in states)
@@ -184,18 +208,22 @@ class Poltergeist.WebPage
         setTimeout (=> @waitState(states, callback)), 100
 
   setHttpAuth: (user, password) ->
-    this.native().settings.userName = user
-    this.native().settings.password = password
+    @native().settings.userName = user
+    @native().settings.password = password
     return true
 
   networkTraffic: (type) ->
-    switch type
+    console.log "traffic is"
+    console.dir @_networkTraffic
+    requests = switch type
       when 'all'
         request for own id, request of @_networkTraffic
       when 'blocked'
         request for own id, request of @_networkTraffic when request.blocked
       else
         request for own id, request of @_networkTraffic when not request.blocked
+    for request in requests
+      JSON.stringify(request, ['_requestId', 'url', 'method', 'postData', 'headers', 'blocked'])
 
   clearNetworkTraffic: ->
     @_networkTraffic = {}
@@ -212,15 +240,15 @@ class Poltergeist.WebPage
     url for own id, url of @_requestedResources
 
   content: ->
-    this.native().frameContent
+    @native().content()
 
   title: ->
-    this.native().frameTitle
+    @native().title()
 
   frameUrl: (frameNameOrId) ->
     query = (frameNameOrId) ->
       document.querySelector("iframe[name='#{frameNameOrId}'], iframe[id='#{frameNameOrId}']")?.src
-    this.evaluate(query, frameNameOrId)
+    @evaluate(query, frameNameOrId)
 
   clearErrors: ->
     @errors = []
@@ -228,55 +256,64 @@ class Poltergeist.WebPage
 
   responseHeaders: ->
     headers = {}
-    @_responseHeaders.forEach (item) ->
-      headers[item.name] = item.value
+    @_responseHeaders.forEach (value, key) ->
+      headers[key] = value
     headers
 
   cookies: ->
-    this.native().cookies
+    @currentFrame().cookies
 
   deleteCookie: (name) ->
-    this.native().deleteCookie(name)
+    @currentFrame().deleteCookie(name)
 
   viewportSize: ->
-    this.native().viewportSize
+    @native().viewport()
 
   setViewportSize: (size) ->
-    this.native().viewportSize = size
+    @native().setViewport size
 
   setZoomFactor: (zoom_factor) ->
-    this.native().zoomFactor = zoom_factor
+    @native().zoomFactor = zoom_factor
 
   setPaperSize: (size) ->
-    this.native().paperSize = size
+    @native().paperSize = size
 
   scrollPosition: ->
-    this.native().scrollPosition
+    throw "not implemented"
+    @native().scrollPosition
 
   setScrollPosition: (pos) ->
-    this.native().scrollPosition = pos
+    @currentFrame().evaluate (x,y)->
+      window.scrollTo(x,y)
+    , pos.left, pos.top
 
-  clipRect: ->
-    this.native().clipRect
-
-  setClipRect: (rect) ->
-    this.native().clipRect = rect
+  # clipRect: ->
+  #   this.native().clipRect
+  #
+  # setClipRect: (rect) ->
+  #   this.native().clipRect = rect
 
   elementBounds: (selector) ->
-    this.native().evaluate(
-      (selector) ->
-        document.querySelector(selector).getBoundingClientRect()
-      , selector
-    )
+    @currentFrame().evaluate((selector) ->
+      rect = document.querySelector(selector).getBoundingClientRect()
+      return x: rect.x, y: rect.y, width: rect.width, height: rect.height, top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right
+    , selector)
 
   setUserAgent: (userAgent) ->
-    this.native().settings.userAgent = userAgent
+    @native().setUserAgent userAgent
 
   getCustomHeaders: ->
-    this.native().customHeaders
+    @_customHeaders
 
   setCustomHeaders: (headers) ->
-    this.native().customHeaders = headers
+    @_customHeaders = headers
+    (if @_customHeaders['User-Agent']
+      @setUserAgent(@_customHeaders['User-Agent'])
+    else
+      Promise.resolve()).then =>
+        map = new Map()
+        map.set(name, value) for name, value of headers
+        @native().setExtraHTTPHeaders(map)
 
   addTempHeader: (header) ->
     for name, value of header
@@ -301,47 +338,35 @@ class Poltergeist.WebPage
     @setCustomHeaders(allHeaders)
 
   pushFrame: (name) ->
-    return true if this.native().switchToFrame(name)
-
-    # if switch by name fails - find index and try again
-    frame_no = this.native().evaluate(
-      (frame_name) ->
-        frames = document.querySelectorAll("iframe, frame")
-        (idx for f, idx in frames when f?['name'] == frame_name or f?['id'] == frame_name)[0]
-      , name)
-    frame_no? and this.native().switchToFrame(frame_no)
+    new_frame = (frame for frame in @currentFrame().childFrames() when frame.name() == name)[0]
+    if new_frame
+      @frames.push new_frame
+      Promise.resolve(new_frame)
+    else
+      promises = for frame in @currentFrame().childFrames()
+        frame.evaluate ->
+          # window.frameElement.getAttribute("Name")
+          window.frameElement
+      Promise.all(promises).then (results)->
+        Promise.resolve()
 
   popFrame: (pop_all = false)->
     if pop_all
-      this.native().switchToMainFrame()
+      @frames = []
     else
-      this.native().switchToParentFrame()
+      @frames.pop()
+    true
 
   dimensions: ->
-    scroll   = this.scrollPosition()
-    viewport = this.viewportSize()
+    @documentSize().then (d_size)=>
+    # scroll   = this.scrollPosition()
+      scroll = { top: 0, left: 0}
+      viewport = this.viewportSize()
 
-    top:    scroll.top,  bottom: scroll.top  + viewport.height,
-    left:   scroll.left, right:  scroll.left + viewport.width,
-    viewport: viewport
-    document: this.documentSize()
-
-  # A work around for http://code.google.com/p/phantomjs/issues/detail?id=277
-  validatedDimensions: ->
-    dimensions = this.dimensions()
-    document   = dimensions.document
-
-    if dimensions.right > document.width
-      dimensions.left  = Math.max(0, dimensions.left - (dimensions.right - document.width))
-      dimensions.right = document.width
-
-    if dimensions.bottom > document.height
-      dimensions.top    = Math.max(0, dimensions.top - (dimensions.bottom - document.height))
-      dimensions.bottom = document.height
-
-    this.setScrollPosition(left: dimensions.left, top: dimensions.top)
-
-    dimensions
+      top:    scroll.top,  bottom: scroll.top  + viewport.height,
+      left:   scroll.left, right:  scroll.left + viewport.width,
+      viewport: viewport
+      document: d_size
 
   get: (id) ->
     new Poltergeist.Node(this, id)
@@ -349,82 +374,104 @@ class Poltergeist.WebPage
   # Before each mouse event we make sure that the mouse is moved to where the
   # event will take place. This deals with e.g. :hover changes.
   mouseEvent: (name, x, y, button = 'left') ->
-    this.sendEvent('mousemove', x, y)
-    this.sendEvent(name, x, y, button)
+    switch name
+      when 'click'
+        @native().mouse.click(x,y)
+      when 'dblclick'
+        @native().mouse.click(x,y, clickCount: 2)
+      when 'mousedown'
+        # console.log "moving to #{x}, #{y} then downing mouse"
+        @native().mouse.move(x,y).then => @native().mouse.down
+      when 'mouseup'
+        # console.log "moving to #{x}, #{y} then uping mouse"
+        @native().mouse.move(x,y).then => @native().mouse.up
+      else
+        throw "Unknown mouse event #{name}"
 
   evaluate: (fn, args...) ->
-    this.injectAgent()
-    result = this.native().evaluate("function() {
+    fn_args = (JSON.stringify(arg) for arg in [@id, args...])
+    wrapped_fn = "(function() {
       var page_id = arguments[0];
       var args = [];
 
       for(var i=1; i < arguments.length; i++){
-        if ((typeof(arguments[i]) == 'object') && (typeof(arguments[i]['ELEMENT']) == 'object')){
-          args.push(window.__poltergeist.get(arguments[i]['ELEMENT']['id']).element);
+        var arg = arguments[i];
+        if ((typeof(arg) == 'object') && (typeof(arg['ELEMENT']) == 'object')){
+          args.push(window.__poltergeist.get(arg['ELEMENT']['id']).element);
         } else {
-          args.push(arguments[i])
+          args.push(arg)
         }
       }
       var _result = #{this.stringifyCall(fn, "args")};
-      return window.__poltergeist.wrapResults(_result, page_id); }", @id, args...)
-    result
+      return window.__poltergeist.wrapResults(_result, page_id); })(#{fn_args.join(',')})"
+    @currentFrame().evaluate(wrapped_fn).catch (err)->
+      throw new Poltergeist.JavascriptError([message: err.toString(), stack: err.toString()])
 
   execute: (fn, args...) ->
-    this.native().evaluate("function() {
+    fn_args = (JSON.stringify(arg) for arg in args)
+
+    wrapped_fn = "(function() {
+      var args = [];
       for(var i=0; i < arguments.length; i++){
-        if ((typeof(arguments[i]) == 'object') && (typeof(arguments[i]['ELEMENT']) == 'object')){
-          arguments[i] = window.__poltergeist.get(arguments[i]['ELEMENT']['id']).element;
+        var arg = arguments[i];
+        if ((typeof(arg) == 'object') && (typeof(arg['ELEMENT']) == 'object')){
+          args.push(window.__poltergeist.get(arg['ELEMENT']['id']).element);
+        } else {
+          args.push(arg)
         }
       }
-      #{this.stringifyCall(fn)} }", args...)
+      #{this.stringifyCall(fn, "args")} })(#{fn_args.join(',')})"
+    @currentFrame().evaluate(wrapped_fn).catch (err)->
+      throw new Poltergeist.JavascriptError([message: err.toString(), stack: err.toString()])
 
   stringifyCall: (fn, args_name = "arguments") ->
     "(#{fn.toString()}).apply(this, #{args_name})"
 
   bindCallback: (name) ->
-    @native()[name] = =>
-      result = @[name + 'Native'].apply(@, arguments) if @[name + 'Native']? # For internal callbacks
-      @[name].apply(@, arguments) if result != false && @[name]? # For externally set callbacks
+    @native().on name, (args...)=>
+      return @["on_#{name}"].apply(@, args) if @["on_#{name}"]? # For internal callbacks
+      return false
     return true
 
   # Any error raised here or inside the evaluate will get reported to
   # phantom.onError. If result is null, that means there was an error
   # inside the agent.
   runCommand: (name, args) ->
-    result = this.evaluate(
-      (name, args) -> __poltergeist.externalCall(name, args),
-      name, args
-    )
+    this.evaluate(
+      (cmd_name, cmd_args) ->
+        __poltergeist.externalCall(cmd_name, cmd_args)
+      ,name, args
+    ).then (result)->
+      if result?.error?
+        switch result.error.message
+          when 'PoltergeistAgent.ObsoleteNode'
+            throw new Poltergeist.ObsoleteNode
+          when 'PoltergeistAgent.InvalidSelector'
+            [method, selector] = args
+            throw new Poltergeist.InvalidSelector(method, selector)
+          else
+            throw new Poltergeist.BrowserError(result.error.message, result.error.stack)
+      else
+        result?.value
 
-    if result?.error?
-      switch result.error.message
-        when 'PoltergeistAgent.ObsoleteNode'
-          throw new Poltergeist.ObsoleteNode
-        when 'PoltergeistAgent.InvalidSelector'
-          [method, selector] = args
-          throw new Poltergeist.InvalidSelector(method, selector)
-        else
-          throw new Poltergeist.BrowserError(result.error.message, result.error.stack)
-    else
-      result?.value
-
-  canGoBack: ->
-    this.native().canGoBack
-
-  canGoForward: ->
-    this.native().canGoForward
+  # canGoBack: ->
+  #   this.native().canGoBack
+  #
+  # canGoForward: ->
+  #   this.native().canGoForward
 
   normalizeURL: (url) ->
+    console.log "implement normalizeURL"
     parser = document.createElement('a')
     parser.href = url
-    return parser.href
+    parser.href
 
   clearMemoryCache: ->
-    clearMemoryCache = this.native().clearMemoryCache
+    clearMemoryCache = @native().clearMemoryCache
     if typeof clearMemoryCache == "function"
       clearMemoryCache()
     else
-      throw new Poltergeist.UnsupportedFeature("clearMemoryCache is supported since PhantomJS 2.0.0")
+      throw new Poltergeist.UnsupportedFeature("clearMemoryCache is not supported in Puppeteer")
 
   _blockRequest: (url) ->
     useWhitelist = @urlWhitelist.length > 0
@@ -435,97 +482,18 @@ class Poltergeist.WebPage
     blacklisted = @urlBlacklist.some (blacklisted_regex) ->
       blacklisted_regex.test url
 
-    if useWhitelist && !whitelisted
-      return true
+    (useWhitelist && !whitelisted) || blacklisted
 
-    if blacklisted
-      return true
-
-    false
-
-  _overrideNativeEvaluate: ->
-    # PhantomJS 1.9.x WebPage#evaluate depends on the browser context  JSON, this replaces it
-    # with the evaluate from 2.1.1 which uses the PhantomJS JSON
-    @_native.evaluate = `function (func, args) {
-        function quoteString(str) {
-            var c, i, l = str.length, o = '"';
-            for (i = 0; i < l; i += 1) {
-                c = str.charAt(i);
-                if (c >= ' ') {
-                    if (c === '\\' || c === '"') {
-                        o += '\\';
-                    }
-                    o += c;
-                } else {
-                    switch (c) {
-                    case '\b':
-                        o += '\\b';
-                        break;
-                    case '\f':
-                        o += '\\f';
-                        break;
-                    case '\n':
-                        o += '\\n';
-                        break;
-                    case '\r':
-                        o += '\\r';
-                        break;
-                    case '\t':
-                        o += '\\t';
-                        break;
-                    default:
-                        c = c.charCodeAt();
-                        o += '\\u00' + Math.floor(c / 16).toString(16) +
-                            (c % 16).toString(16);
-                    }
-                }
-            }
-            return o + '"';
-        }
-
-        function detectType(value) {
-            var s = typeof value;
-            if (s === 'object') {
-                if (value) {
-                    if (value instanceof Array) {
-                        s = 'array';
-                    } else if (value instanceof RegExp) {
-                        s = 'regexp';
-                    } else if (value instanceof Date) {
-                        s = 'date';
-                    }
-                } else {
-                    s = 'null';
-                }
-            }
-            return s;
-        }
-
-        var str, arg, argType, i, l;
-        if (!(func instanceof Function || typeof func === 'string' || func instanceof String)) {
-            throw "Wrong use of WebPage#evaluate";
-        }
-        str = 'function() { return (' + func.toString() + ')(';
-        for (i = 1, l = arguments.length; i < l; i++) {
-            arg = arguments[i];
-            argType = detectType(arg);
-
-            switch (argType) {
-            case "object":      //< for type "object"
-            case "array":       //< for type "array"
-                str += JSON.stringify(arg) + ","
-                break;
-            case "date":        //< for type "date"
-                str += "new Date(" + JSON.stringify(arg) + "),"
-                break;
-            case "string":      //< for type "string"
-                str += quoteString(arg) + ',';
-                break;
-            default:            // for types: "null", "number", "function", "regexp", "undefined"
-                str += arg + ',';
-                break;
-            }
-        }
-        str = str.replace(/,$/, '') + '); }';
-        return this.evaluateJavaScript(str);
-    };`
+  _add_injection: (filePath)->
+    new Promise (resolve, reject)->
+      try
+        fs.readFile filePath, 'utf8', (err, data) ->
+          if err
+            reject(err)
+          else
+            resolve(data)
+      catch err
+        reject(err)
+    .then (contents)=>
+      @native().evaluateOnNewDocument(contents)
+      contents

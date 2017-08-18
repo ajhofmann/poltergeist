@@ -248,10 +248,6 @@ or even more complicated:
 element.send_keys('H', 'elo', :left, 'l') # => 'Hello'
 element.send_keys(:enter) # triggers Enter key
 ```
-Since it's implemented natively in PhantomJS this will exactly imitate user
-behavior.
-See more about [sendEvent](http://phantomjs.org/api/webpage/method/send-event.html) and
-[PhantomJS keys](https://github.com/ariya/phantomjs/commit/cab2635e66d74b7e665c44400b8b20a8f225153a)
 
 ## Customization ##
 
@@ -266,12 +262,11 @@ end
 
 `options` is a hash of options. The following options are supported:
 
-*   `:phantomjs` (String) - A custom path to the phantomjs executable
 *   `:debug` (Boolean) - When true, debug output is logged to `STDERR`.
     Some debug info from the PhantomJS portion of Poltergeist is also
     output, but this goes to `STDOUT` due to technical limitations.
 *   `:logger` (Object responding to `puts`) - When present, debug output is written to this object
-*   `:phantomjs_logger` (`IO` object) - Where the `STDOUT` from PhantomJS is written to. This is
+*   `:browser_logger` (`IO` object) - Where the `STDOUT` from Chromium is written to. This is
     where your `console.log` statements will show up. Default: `STDOUT`
 *   `:timeout` (Numeric) - The number of seconds we'll wait for a response
     when communicating with PhantomJS. Default is 30.
@@ -281,12 +276,8 @@ end
     as a 2-element array, e.g. [1024, 768]. Default: [1024, 768]
 *   `:screen_size` (Array) - The dimensions the window size will be set to when Window#maximize is called.  Expressed
     as a 2-element array, e.g. [1600, 1200]. Default: [1366, 768]
-*   `:phantomjs_options` (Array) - Additional [command line options](http://phantomjs.org/api/command-line.html)
-    to be passed to PhantomJS, e.g. `['--load-images=no', '--ignore-ssl-errors=yes']`
 *   `:extensions` (Array) - An array of JS files to be preloaded into
-    the phantomjs browser. Useful for faking unsupported APIs.
-*   `:port` (Fixnum) - The port which should be used to communicate with the PhantomJS process. Defaults to a random open port.
-*   `:host` (String) - The name or IP of the PhantomJS host. Default is '127.0.0.1'.
+    the browser. Useful for faking unsupported APIs.
 *   `:url_blacklist` (Array) - Default session url blacklist - expressed as an array of strings to match against requested URLs.
 *   `:url_whitelist` (Array) - Default session url whitelist - expressed as an array of strings to match against requested URLs.
 

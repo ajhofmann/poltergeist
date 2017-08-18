@@ -1,22 +1,20 @@
 dist: trusty
 sudo: false
 script: bundle exec rake
-before_script: ${PHANTOMJS:-phantomjs} --version
 before_install:
-   - mkdir -p travis-phantomjs2 travis-phantomjs21
-   - if [ ! -f $PWD/travis-phantomjs2/phantomjs ]; then wget https://github.com/Pyppe/phantomjs2.0-ubuntu14.04x64/raw/master/bin/phantomjs -O $PWD/travis-phantomjs2/phantomjs; fi
-   - if [ ! -f $PWD/travis-phantomjs21/phantomjs ]; then wget https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2 -O $PWD/phantomjs-2.1-linux-x86_64.tar.bz2; tar -xvf $PWD/phantomjs-2.1-linux-x86_64.tar.bz2 -C $PWD/travis-phantomjs21 --strip-components 2 phantomjs-2.1.1-linux-x86_64/bin/phantomjs; fi
-   - chmod +x $PWD/travis-phantomjs2/phantomjs $PWD/travis-phantomjs21/phantomjs
+   - nvm install 8.4.0
+   - npm install ws
+   - npm install git+https://github.com/GoogleChrome/puppeteer.git
+   - node --version
+   - yarn
 cache:
   directories:
-    - $PWD/travis-phantomjs2
-    - $PWD/travis-phantomjs21
-
 rvm:
   - 2.3.3
   - 2.2.2
-  - 2.1.6
+  - 2.4.1
   - rbx-3
+  - jruby-9.1.12.0
 gemfile:
   - Gemfile
 env:
@@ -31,25 +29,9 @@ addons:
 
 matrix:
   include:
-    - rvm: 1.9.3
-      gemfile: gemfiles/Gemfile.1_9_3
-    - rvm: jruby-19mode
-      gemfile: gemfiles/Gemfile.1_9_3
-    - rvm: 2.0.0
-      gemfile: gemfiles/Gemfile.2_0_0
-    - rvm: 2.2.2
-      gemfile: Gemfile
-      env: PHANTOMJS=$PWD/travis-phantomjs2/phantomjs
     - rvm: 2.4.1
-      gemfile: Gemfile
-      env: PHANTOMJS=$PWD/travis-phantomjs21/phantomjs
-    - rvm: 2.3.3
       gemfile: gemfiles/Gemfile.capybara_master
-      env: PHANTOMJS=$PWD/travis-phantomjs21/phantomjs
-    - rvm: jruby-9.1.7.0
-      gemfile: Gemfile
-      env: PHANTOMJS=$PWD/travis-phantomjs21/phantomjs
   allow_failures:
     - gemfile: gemfiles/Gemfile.capybara_master
-    - rvm: jruby-9.1.7.0
+    - rvm: jruby-9.1.12.0
     - rvm: rbx-3

@@ -34,7 +34,7 @@ module Capybara
       end
 
       def message
-        "There was an error inside the PhantomJS portion of Poltergeist. " \
+        "There was an error inside the Puppeteer portion of Poltergeist. " \
           "If this is the error returned, and not the cause of a more detailed error response, " \
           "this is probably a bug, so please report it. " \
           "\n\n#{name}: #{error_parameters}"

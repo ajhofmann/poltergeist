@@ -1,9 +1,11 @@
+
 class Poltergeist
   constructor: (port, width, height, host) ->
-    @browser    = new Poltergeist.Browser(width, height)
-    @connection = new Poltergeist.Connection(this, port, host)
-
-    phantom.onError = (message, stack) => @onError(message, stack)
+    @browser = new Poltergeist.Browser(width, height)
+    @browser.launch().then =>
+      @connection = new Poltergeist.Connection(this, port, host)
+      console.log "browser launched and connection created"
+    # phantom.onError = (message, stack) => @onError(message, stack)
 
   runCommand: (command) ->
     new Poltergeist.Cmd(this, command.id, command.name, command.args).run(@browser)
@@ -26,7 +28,7 @@ class Poltergeist
 # This is necessary because the remote debugger will wrap the
 # script in a function, causing the Poltergeist variable to
 # become local.
-window.Poltergeist = Poltergeist
+global.Poltergeist = Poltergeist
 
 class Poltergeist.Error
 
@@ -36,37 +38,37 @@ class Poltergeist.ObsoleteNode extends Poltergeist.Error
   toString: -> this.name
 
 class Poltergeist.InvalidSelector extends Poltergeist.Error
-  constructor: (@method, @selector) ->
+  constructor: (@method, @selector) -> super()
   name: "Poltergeist.InvalidSelector"
   args: -> [@method, @selector]
 
 class Poltergeist.FrameNotFound extends Poltergeist.Error
-  constructor: (@frameName) ->
+  constructor: (@frameName) -> super()
   name: "Poltergeist.FrameNotFound"
   args: -> [@frameName]
 
 class Poltergeist.MouseEventFailed extends Poltergeist.Error
-  constructor: (@eventName, @selector, @position) ->
+  constructor: (@eventName, @selector, @position) -> super()
   name: "Poltergeist.MouseEventFailed"
   args: -> [@eventName, @selector, @position]
 
 class Poltergeist.KeyError extends Poltergeist.Error
-  constructor: (@message) ->
+  constructor: (@message) -> super()
   name: "Poltergeist.KeyError"
   args: -> [@message]
 
 class Poltergeist.JavascriptError extends Poltergeist.Error
-  constructor: (@errors) ->
+  constructor: (@errors) -> super()
   name: "Poltergeist.JavascriptError"
   args: -> [@errors]
 
 class Poltergeist.BrowserError extends Poltergeist.Error
-  constructor: (@message, @stack) ->
+  constructor: (@message, @stack) -> super()
   name: "Poltergeist.BrowserError"
   args: -> [@message, @stack]
 
 class Poltergeist.StatusFailError extends Poltergeist.Error
-  constructor: (@url, @details) ->
+  constructor: (@url, @details) -> super()
   name: "Poltergeist.StatusFailError"
   args: -> [@url, @details]
 
@@ -75,17 +77,12 @@ class Poltergeist.NoSuchWindowError extends Poltergeist.Error
   args: -> []
 
 class Poltergeist.UnsupportedFeature extends Poltergeist.Error
-  constructor: (@message) ->
+  constructor: (@message) -> super()
   name: "Poltergeist.UnsupportedFeature"
-  args: -> [@message, phantom.version]
+  args: -> [@message, "phantom.version"]
 
-# We're using phantom.libraryPath so that any stack traces
-# report the full path.
-phantom.injectJs("#{phantom.libraryPath}/web_page.js")
-phantom.injectJs("#{phantom.libraryPath}/node.js")
-phantom.injectJs("#{phantom.libraryPath}/connection.js")
-phantom.injectJs("#{phantom.libraryPath}/cmd.js")
-phantom.injectJs("#{phantom.libraryPath}/browser.js")
+browser = require("./browser.js")
+connection = require("./connection.js")
+cmd = require("./cmd.js")
 
-system = require 'system'
-new Poltergeist(system.args[1], system.args[2], system.args[3], system.args[4])
+new Poltergeist(process.argv.slice(2)...)

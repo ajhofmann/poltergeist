@@ -6,21 +6,7 @@ module Capybara::Poltergeist
     let(:client_params) { {} }
     subject { Client.new(server, client_params) }
 
-    context '#initialize' do
-      it 'raises an error if phantomjs is too old' do
-        stub_version('1.3.0')
-        expect { subject }.to raise_error(Cliver::Dependency::VersionMismatch)
-      end
-
-      it 'does not raise an error if phantomjs is too new' do
-        begin
-          stub_version('1.10.0 (development)')
-          expect { subject }.to_not raise_error
-        ensure
-          subject.stop # process has been spawned, stopping
-        end
-      end
-
+    xcontext '#initialize' do
       it 'shows the detected version in the version error message' do
         stub_version('1.3.0')
         expect { subject }.to raise_error(Cliver::Dependency::VersionMismatch) do |e|
@@ -28,7 +14,7 @@ module Capybara::Poltergeist
         end
       end
 
-      context 'when phantomjs does not exist' do
+      context 'when nodejs does not exist' do
         let(:client_params) { { path: '/does/not/exist' } }
 
         it 'raises an error' do

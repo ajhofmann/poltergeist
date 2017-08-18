@@ -17,9 +17,8 @@
     <div id="key-events-output"></div>
     <script>
       function processForm(e) {
-          if (e.preventDefault) e.preventDefault();
+          e.preventDefault();
           document.querySelector("#without_submit_button input").value = "Submitted";
-          return false;
       }
 
       var form = document.getElementById("without_submit_button");

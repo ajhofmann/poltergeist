@@ -1,8 +1,10 @@
+WebSocket = require 'ws'
+
 class Poltergeist.Connection
   constructor: (@owner, @port, @host = "127.0.0.1") ->
     @socket = new WebSocket "ws://#{@host}:#{@port}/"
     @socket.onmessage = this.commandReceived
-    @socket.onclose = -> phantom.exit()
+    @socket.onclose = => @owner.browser.browser.close()
 
   commandReceived: (message) =>
     @owner.runCommand(JSON.parse(message.data))

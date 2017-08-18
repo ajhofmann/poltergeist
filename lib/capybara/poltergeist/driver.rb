@@ -42,23 +42,23 @@ module Capybara::Poltergeist
 
     def client
       @client ||= Client.start(server,
-        :path              => options[:phantomjs],
+        :path              => options[:nodejs],
         :window_size       => options[:window_size],
-        :phantomjs_options => phantomjs_options,
-        :phantomjs_logger  => phantomjs_logger
+        :browser_options => browser_options,
+        :browser_logger  => browser_logger
       )
     end
 
-    def phantomjs_options
-      list = options[:phantomjs_options] || []
+    def browser_options
+      list = options[:browser_options] || []
 
       # PhantomJS defaults to only using SSLv3, which since POODLE (Oct 2014)
       # many sites have dropped from their supported protocols (eg PayPal,
       # Braintree).
-      list += ["--ignore-ssl-errors=yes"] unless list.grep(/ignore-ssl-errors/).any?
-      list += ["--ssl-protocol=TLSv1"] unless list.grep(/ssl-protocol/).any?
-      list += ["--remote-debugger-port=#{inspector.port}", "--remote-debugger-autorun=yes"] if inspector
-      list
+      # list += ["--ignore-ssl-errors=yes"] unless list.grep(/ignore-ssl-errors/).any?
+      # list += ["--ssl-protocol=TLSv1"] unless list.grep(/ssl-protocol/).any?
+      # list += ["--remote-debugger-port=#{inspector.port}", "--remote-debugger-autorun=yes"] if inspector
+      # list
     end
 
     def client_pid
@@ -88,8 +88,8 @@ module Capybara::Poltergeist
     end
 
     # logger should be an object that behaves like IO or nil
-    def phantomjs_logger
-      options.fetch(:phantomjs_logger, nil)
+    def browser_logger
+      options.fetch(:browser_logger, nil)
     end
 
     def visit(url)
@@ -144,12 +144,8 @@ module Capybara::Poltergeist
       nil
     end
 
-    def within_frame(name, &block)
-      browser.within_frame(name, &block)
-    end
-
-    def switch_to_frame(locator, &block)
-      browser.switch_to_frame(locator, &block)
+    def switch_to_frame(frame)
+      browser.switch_to_frame(frame)
     end
 
     def current_window_handle
@@ -403,9 +399,8 @@ module Capybara::Poltergeist
       expect_regexp = expect_text.is_a?(Regexp) ? expect_text : Regexp.escape(expect_text.to_s)
       not_found_msg = 'Unable to find modal dialog'
       not_found_msg += " with #{expect_text}" if expect_text
-
       begin
-        modal_text = browser.modal_message
+        modal_text = browser.modal_message()
         raise Capybara::ModalNotFound if modal_text.nil? || (expect_text && !modal_text.match(expect_regexp))
       rescue Capybara::ModalNotFound => e
         raise e, not_found_msg if (Time.now - start_time) >= timeout_sec

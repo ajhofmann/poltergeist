@@ -4,9 +4,9 @@ require 'cliver'
 
 module Capybara::Poltergeist
   class Client
-    PHANTOMJS_SCRIPT  = File.expand_path('../client/compiled/main.js', __FILE__)
-    PHANTOMJS_VERSION = ['>= 1.8.1', '< 3.0']
-    PHANTOMJS_NAME    = 'phantomjs'
+    NODEJS_SCRIPT  = File.expand_path('../client/compiled/main.js', __FILE__)
+    NODEJS_VERSION = ['>= 8.0.0']
+    NODEJS_NAME = 'node'
 
     KILL_TIMEOUT = 2 # seconds
 
@@ -43,25 +43,22 @@ module Capybara::Poltergeist
       end
     end
 
-    attr_reader :pid, :server, :path, :window_size, :phantomjs_options
+    attr_reader :pid, :server, :path, :window_size, :browser_options
 
     def initialize(server, options = {})
       @server            = server
-      @path              = Cliver::detect((options[:path] || PHANTOMJS_NAME), *['>=2.1.0', '< 3.0'])
-      @path            ||= Cliver::detect!((options[:path] || PHANTOMJS_NAME), *PHANTOMJS_VERSION).tap do
-        warn "You're running an old version of PhantomJS, update to >= 2.1.1 for a better experience."
-      end
+      @path              = Cliver::detect((options[:path] || NODEJS_NAME), *['>=8.0.0'])
 
       @window_size       = options[:window_size]       || [1024, 768]
-      @phantomjs_options = options[:phantomjs_options] || []
-      @phantomjs_logger  = options[:phantomjs_logger]  || $stdout
+      @broser_options = options[:browser_options] || options[:phantomjs_options] || []
+      @browser_logger  = options[:browser_logger] || options[:phantomjs_logger] || $stdout
     end
 
     def start
       @read_io, @write_io = IO.pipe
       @out_thread = Thread.new {
         while !@read_io.eof? && data = @read_io.readpartial(1024)
-          @phantomjs_logger.write(data)
+          @browser_logger.write(data)
         end
       }
 
@@ -73,6 +70,7 @@ module Capybara::Poltergeist
         @pid = Process.spawn(*command.map(&:to_s), process_options)
         ObjectSpace.define_finalizer(self, self.class.process_killer(@pid))
       end
+      sleep 5
     end
 
     def stop
@@ -91,11 +89,11 @@ module Capybara::Poltergeist
 
     def command
       parts = [path]
-      parts.concat phantomjs_options
-      parts << PHANTOMJS_SCRIPT
+      parts << NODEJS_SCRIPT
       parts << server.port
       parts.concat window_size
       parts << server.host
+      # parts.concat phantomjs_options
       parts
     end
 

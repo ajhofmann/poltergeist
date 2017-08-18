@@ -1,4 +1,4 @@
-navigator.geolocation =
+navigator.custom_extension =
   {
     getCurrentPosition: function(callback)
     {

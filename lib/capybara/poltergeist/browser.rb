@@ -102,7 +102,7 @@ module Capybara::Poltergeist
     end
 
     def select_file(page_id, id, value)
-      command 'select_file', page_id, id, value
+      command 'select_file', page_id, id, Array(value)
     end
 
     def tag_name(page_id, id)
@@ -129,22 +129,10 @@ module Capybara::Poltergeist
       command 'execute', script, *args
     end
 
-    def within_frame(handle, &block)
-      if handle.is_a?(Capybara::Node::Base)
-        command 'push_frame', [handle.native.page_id, handle.native.id]
-      else
-        command 'push_frame', handle
-      end
-
-      yield
-    ensure
-      command 'pop_frame'
-    end
-
-    def switch_to_frame(handle, &block)
-      case handle
+    def switch_to_frame(frame)
+      case frame
       when Capybara::Node::Base
-        command 'push_frame', [handle.native.page_id, handle.native.id]
+        command 'push_frame', [frame.native.page_id, frame.native.id]
       when :parent
         command 'pop_frame'
       when :top
@@ -437,13 +425,17 @@ module Capybara::Poltergeist
     KEY_ALIASES = {
       command:   :Meta,
       equals:    :Equal,
-      Control:   :Ctrl,
-      control:   :Ctrl,
+      control:   :Control,
+      ctrl:      :Control,
       multiply:  'numpad*',
       add:       'numpad+',
       divide:    'numpad/',
       subtract:  'numpad-',
-      decimal:   'numpad.'
+      decimal:   'numpad.',
+      left:      'ArrowLeft',
+      right:     'ArrowRight',
+      down:      'ArrowDown',
+      up:        'ArrowUp',
     }
 
     def normalize_keys(keys)
@@ -459,7 +451,7 @@ module Capybara::Poltergeist
           modifiers = if _keys.peek[0]
             _keys.next[1].map do |k|
               k = k.to_s.downcase
-              k = 'ctrl' if k == 'control'
+              k = 'control' if k== 'ctrl'
               k = 'meta' if k == 'command'
               k
             end.join(',')
@@ -470,11 +462,15 @@ module Capybara::Poltergeist
           { modifier: modifiers, keys: letters }
         when Symbol
           # Return a known sequence for PhantomJS
-          key = KEY_ALIASES.fetch(key_desc, key_desc)
-          if match = key.to_s.match(/numpad(.)/)
-            res = { keys: match[1], modifier: 'keypad' }
-          elsif key !~ /^[A-Z]/
-            key = key.to_s.split('_').map{ |e| e.capitalize }.join
+          if key_desc == :space
+            res = " "
+          else
+            key = KEY_ALIASES.fetch(key_desc.downcase, key_desc)
+            if match = key.to_s.match(/numpad(.)/)
+              res = { keys: match[1], modifier: 'keypad' }
+            elsif key !~ /^[A-Z]/
+              key = key.to_s.split('_').map{ |e| e.capitalize }.join
+            end
           end
           res || { key: key }
         when String

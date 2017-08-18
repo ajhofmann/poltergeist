@@ -2,7 +2,7 @@ POLTERGEIST_ROOT = File.expand_path('../..', __FILE__)
 $:.unshift(POLTERGEIST_ROOT + '/lib')
 
 require 'bundler/setup'
-
+require 'byebug'
 require 'rspec'
 require 'capybara/spec/spec_helper'
 require 'capybara/poltergeist'
@@ -17,8 +17,6 @@ Capybara.register_driver :poltergeist do |app|
     inspector: debug,
     debug: debug
   }
-
-  options[:phantomjs] = ENV['PHANTOMJS'] if ENV['TRAVIS'] && ENV['PHANTOMJS']
 
   Capybara::Poltergeist::Driver.new(
     app, options
@@ -52,6 +50,8 @@ RSpec.configure do |config|
     TestSessions.logger.reset
   end
 
+  config.include Capybara::RSpecMatchers
+
   config.after do |example|
     if ENV['DEBUG']
       puts TestSessions.logger.messages
@@ -76,9 +76,5 @@ RSpec.configure do |config|
       Poltergeist::SpecHelper.set_capybara_wait_time(1)
     end
   end
-end
-
-def phantom_version_is?(ver_spec, driver)
-  Cliver.detect(driver.options[:phantomjs] || Capybara::Poltergeist::Client::PHANTOMJS_NAME, ver_spec)
 end
 

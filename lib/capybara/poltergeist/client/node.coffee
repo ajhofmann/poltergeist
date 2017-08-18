@@ -1,52 +1,54 @@
 # Proxy object for forwarding method calls to the node object inside the page.
 
 class Poltergeist.Node
-  @DELEGATES = ['allText', 'visibleText', 'getAttribute', 'value', 'set', 'setAttribute', 'isObsolete',
-                'removeAttribute', 'isMultiple', 'select', 'tagName', 'find', 'getAttributes',
+  @DELEGATES = ['allText', 'visibleText', 'getAttribute', 'getAttributes', 'value', 'set', 'setAttribute', 'isObsolete',
+                'removeAttribute', 'isMultiple', 'select', 'tagName', 'find',
                 'isVisible', 'isInViewport', 'position', 'trigger', 'parentId', 'parentIds', 'mouseEventTest',
                 'scrollIntoView', 'isDOMEqual', 'isDisabled', 'deleteText', 'containsSelection',
                 'path', 'getProperty']
+
+  for name in @DELEGATES
+    do (name) =>
+      Node.prototype[name] = (args...) ->
+        @page.nodeCall(@id, name, args)
 
   constructor: (@page, @id) ->
 
   parent: ->
     new Poltergeist.Node(@page, this.parentId())
 
-  for name in @DELEGATES
-    do (name) =>
-      this.prototype[name] = (args...) ->
-        @page.nodeCall(@id, name, args)
-
   mouseEventPosition: ->
     viewport = @page.viewportSize()
 
-    if image = @_getAreaImage()
-      pos = image.position()
-
-      if area_offset = @_getAreaOffsetRect()
-        pos.left = pos.left + area_offset.x
-        pos.right = pos.left + area_offset.width
-        pos.top = pos.top + area_offset.y
-        pos.bottom = pos.top + area_offset.height
+    image = await @_getAreaImage()
+    pos = if image
+      p = await image.position()
+      area_offset = await @_getAreaOffsetRect()
+      if area_offset
+        p.left = p.left + area_offset.x
+        p.right = p.left + area_offset.width
+        p.top = p.top + area_offset.y
+        p.bottom = p.top + area_offset.height
+      p
     else
-      pos = this.position()
+      await this.position()
 
     middle = (start, end, size) ->
-      start + ((Math.min(end, size) - start) / 2)
+      Math.round(start + ((Math.min(end, size) - start) / 2))
 
-    res = {
+    {
       x: middle(pos.left, pos.right,  viewport.width),
       y: middle(pos.top,  pos.bottom, viewport.height)
     }
 
-
   mouseEvent: (name) ->
-    if area_image = @_getAreaImage()
-      area_image.scrollIntoView()
+    area_image = await @_getAreaImage()
+    if area_image
+      await area_image.scrollIntoView()
     else
-      @scrollIntoView()
-    pos = this.mouseEventPosition()
-    test = this.mouseEventTest(pos.x, pos.y)
+      await @scrollIntoView()
+    pos = await @mouseEventPosition()
+    test = await @mouseEventTest(pos.x, pos.y)
     if test.status == 'success'
       if name == 'rightclick'
         @page.mouseEvent('click', pos.x, pos.y, 'right')
@@ -55,37 +57,35 @@ class Poltergeist.Node
         @page.mouseEvent(name, pos.x, pos.y)
       pos
     else
-      throw new Poltergeist.MouseEventFailed(name, test.selector, pos)
+      Promise.reject(new Poltergeist.MouseEventFailed(name, test.selector, pos))
 
   dragTo: (other) ->
-    this.scrollIntoView()
-
-    position      = this.mouseEventPosition()
-    otherPosition = other.mouseEventPosition()
-
-    @page.mouseEvent('mousedown', position.x,      position.y)
-    @page.mouseEvent('mouseup',   otherPosition.x, otherPosition.y)
+    await @scrollIntoView()
+    Promise.all([@mouseEventPosition(),other.mouseEventPosition()]).then (positions)=>
+      @page.mouseEvent('mousedown', positions[0].x, positions[0].y).then =>
+        return new Promise((resolve)->
+           setTimeout(resolve, 100)
+        ).then =>
+          @page.mouseEvent('mouseup', positions[1].x, positions[1].y).then
 
   dragBy: (x, y) ->
-    this.scrollIntoView()
-
-    position      = this.mouseEventPosition()
-
+    await @scrollIntoView()
+    position = await @mouseEventPosition()
     final_pos =
       x: position.x + x
       y: position.y + y
 
-    @page.mouseEvent('mousedown', position.x, position.y)
-    @page.mouseEvent('mouseup', final_pos.x, final_pos.y)
-
+    @page.mouseEvent('mousedown', position.x, position.y).then =>
+      @page.mouseEvent('mouseup', final_pos.x, final_pos.y)
 
   isEqual: (other) ->
     @page == other.page && this.isDOMEqual(other.id)
 
   _getAreaOffsetRect: ->
     # get the offset of the center of selected area
-    shape = @getAttribute('shape').toLowerCase();
-    coords = (parseInt(coord,10) for coord in @getAttribute('coords').split(','))
+    attrs = await @getAttributes('shape', 'coords')
+    shape = attrs['shape'].toLowerCase();
+    coords = (parseInt(coord,10) for coord in attrs['coords'].split(','))
 
     rect = switch shape
       when 'rect', 'rectangle'
@@ -109,19 +109,23 @@ class Poltergeist.Node
         { x: minX, y: minY, width: maxX-minX, height: maxY-minY }
 
   _getAreaImage: ->
-    if 'area' == @tagName().toLowerCase()
-      map = @parent()
-      if map.tagName().toLowerCase() != 'map'
-        throw new Error('the area is not within a map')
+    @tagName().then (tn)=>
+      if tn.toLowerCase() == 'area'
+        map = @parent()
+        @parent().then (map)=>
+          map.tagName().then (map_tn)=>
+            if map_tn.toLowerCase() != 'map'
+              throw new Error('the area is not within a map')
 
-      mapName = map.getAttribute('name')
-      if not mapName?
-        throw new Error ("area's parent map must have a name")
-      mapName = '#' + mapName.toLowerCase()
+            map.getAttribute('name').then (mapName)=>
+              if not mapName?
+                throw new Error ("area's parent map must have a name")
+              mapName = '#' + mapName.toLowerCase()
 
-      image_node_id = @page.find('css', "img[usemap='#{mapName}']")[0]
-      if not image_node_id?
-        throw new Error ("no image matches the map")
+              image_node_id =
+              @page.find('css', "img[usemap='#{mapName}']").then (els)=>
+                image_node_id=els[0]
+                if not image_node_id?
+                  throw new Error ("no image matches the map")
 
-      @page.get(image_node_id)
-
+                @page.get(image_node_id)
