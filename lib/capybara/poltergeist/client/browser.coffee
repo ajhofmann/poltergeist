@@ -234,8 +234,8 @@ class Poltergeist.Browser
     # @current_command.sendResponse(true)
     page = await @_open_new_window()
     page.handle = "#{@_counter++}"
-    page.urlBlacklist = @page.urlBlacklist
-    page.urlWhitelist = @page.urlWhitelist
+    page.setBlacklist @page.urlBlacklist
+    page.setWhitelist @page.urlWhitelist
     await page.setViewportSize(@page.viewportSize())
     @current_command.sendResponse(true)
 
@@ -274,8 +274,6 @@ class Poltergeist.Browser
     # page.onPageCreated = (newPage) =>
     #   page = new Poltergeist.WebPage(newPage)
     #   page.handle = "#{@_counter++}"
-    #   page.urlBlacklist = @page.urlBlacklist
-    #   page.urlWhitelist = @page.urlWhitelist
     #   page.setViewportSize(@page.viewportSize())
     #   @pages.push(page)
 
@@ -349,9 +347,11 @@ class Poltergeist.Browser
   hover: (page_id, id) ->
     node = @node(page_id, id)
     # Puppeteer requires locating the element by css to call hover, so we need to adjust element
-    @current_command.sendResponse @currentPage.beforeAction(node.id).then =>
-      @currentPage.native().hover('[_poltergeist_selected]').then =>
-        @currentPage.afterAction(node.id)
+    @current_command.sendResponse(
+      @currentPage.beforeAction(node.id).then =>
+        @currentPage.native().hover('[_poltergeist_selected]').then =>
+          @currentPage.afterAction(node.id)
+    )
 
   click_coordinates: (x, y) ->
     @currentPage.native().mouse.click(x,y).then =>
@@ -555,11 +555,11 @@ class Poltergeist.Browser
     @currentPage.reload().then => @_waitForHistoryChange()
 
   set_url_whitelist: (wildcards...)->
-    @currentPage.urlWhitelist = (@_wildcardToRegexp(wc) for wc in wildcards)
+    @currentPage.setWhitelist(@_wildcardToRegexp(wc) for wc in wildcards)
     @current_command.sendResponse(true)
 
   set_url_blacklist: (wildcards...)->
-    @currentPage.urlBlacklist = (@_wildcardToRegexp(wc) for wc in wildcards)
+    @currentPage.setBlacklist(@_wildcardToRegexp(wc) for wc in wildcards)
     @current_command.sendResponse(true)
 
   set_confirm_process: (process) ->

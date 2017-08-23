@@ -946,7 +946,7 @@ module Capybara::Poltergeist
         end
       end
 
-      it 'inherits url_whitelist', :tw do
+      it 'inherits url_whitelist' do
         @session.visit '/'
         @driver.browser.url_whitelist = ['url_whitelist', '/poltergeist/wanted']
         new_tab = @session.open_new_window

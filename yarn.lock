@@ -172,8 +172,8 @@ proxy-from-env@^1.0.0:
   resolved "https://registry.yarnpkg.com/proxy-from-env/-/proxy-from-env-1.0.0.tgz#33c50398f70ea7eb96d21f7b817630a55791c7ee"
 
 "puppeteer@github:GoogleChrome/puppeteer":
-  version "0.9.0"
-  resolved "https://codeload.github.com/GoogleChrome/puppeteer/tar.gz/a00ba6a3d92ab885ab6beae0e06993723e45d6fd"
+  version "0.9.1-alpha"
+  resolved "https://codeload.github.com/GoogleChrome/puppeteer/tar.gz/a1414de42fe1451bf7fadc2ad2a6c2035f309994"
   dependencies:
     debug "^2.6.8"
     extract-zip "^1.6.5"

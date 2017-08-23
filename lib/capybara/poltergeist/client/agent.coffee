@@ -136,7 +136,7 @@ class PoltergeistAgent.Node
     @element.dispatchEvent(event)
 
   keypressed: (altKey, ctrlKey, shiftKey, metaKey, keyCode, charCode) ->
-    event = new KeyboardEvent 'keyPress',{ window: @agent.window,
+    event = new KeyboardEvent 'keypress',{ window: @agent.window,
       altKey, ctrlKey, shiftKey, metaKey, keyCode, charCode }
     @element.dispatchEvent(event)
   insideBody: ->

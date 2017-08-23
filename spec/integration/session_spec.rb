@@ -204,7 +204,7 @@ describe Capybara::Session do
         expect(@session.find(:css, '#changes_on_keyup').text).to eq('6')
       end
 
-      it 'fires the keypress event', :set_fails do
+      it 'fires the keypress event', :set_fails, :tw do
         expect(@session.find(:css, '#changes_on_keypress').text).to eq('6')
       end
 
@@ -236,7 +236,7 @@ describe Capybara::Session do
         expect(element.value).to eq('$52.00')
       end
 
-      it 'attaches a file when passed a Pathname' do
+      it 'attaches a file when passed a Pathname', :tw do
         filename = Pathname.new('spec/tmp/a_test_pathname').expand_path
         File.open(filename, 'w') { |f| f.write('text') }
 

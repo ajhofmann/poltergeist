@@ -51,8 +51,7 @@ class Poltergeist.WebPage
         @_add_injection(filePath).then (contents)=>
           @currentFrame().evaluate(contents)
     ).then =>
-      @native().setRequestInterceptionEnabled(true).then ->
-        return true
+      return true
 
   # onInitializedNative: ->
   #   @id += 1
@@ -111,21 +110,28 @@ class Poltergeist.WebPage
       error: null
     }
 
-    if @_blockRequest(request.url)
-      @_networkTraffic[request._requestId].blocked = true
-      @_blockedUrls.push request.url unless request.url in @_blockedUrls
-      request.abort()
+    # Intecepting causes the `Referer` header to be lost, therefore
+    # we only intercept when black/whitelist are set so we can
+    # maintain the headers for now
+    if @_intercepting
+      if @_blockRequest(request.url)
+        @_networkTraffic[request._requestId].blocked = true
+        @_blockedUrls.push request.url unless request.url in @_blockedUrls
+        request.abort()
+      else
+        @lastRequestId = request._requestId
+
+        # @normalizeURL(request.url).then (url)=>
+        #   if (url == @redirectURL)
+        #     @removeTempHeadersForRedirect()
+        #     @redirectURL = null
+        #     @requestId   = request._requestId
+
+        @_requestedResources[request._requestId] = request.url
+        request.continue()
     else
       @lastRequestId = request._requestId
-
-      # @normalizeURL(request.url).then (url)=>
-      #   if (url == @redirectURL)
-      #     @removeTempHeadersForRedirect()
-      #     @redirectURL = null
-      #     @requestId   = request._requestId
-
       @_requestedResources[request._requestId] = request.url
-      request.continue()
     return true
 
   on_response: (response) ->
@@ -460,7 +466,7 @@ class Poltergeist.WebPage
   # canGoForward: ->
   #   this.native().canGoForward
 
-  normalizeURL: (url) ->
+  normalizeURL: (url)->
     console.log "implement normalizeURL"
     parser = document.createElement('a')
     parser.href = url
@@ -472,6 +478,17 @@ class Poltergeist.WebPage
       clearMemoryCache()
     else
       throw new Poltergeist.UnsupportedFeature("clearMemoryCache is not supported in Puppeteer")
+
+  setBlacklist: (bl)->
+    @urlBlacklist = bl
+    await @native().setRequestInterceptionEnabled(@_intercepting)
+
+  setWhitelist: (bl)->
+    @urlWhitelist = bl
+    await @native().setRequestInterceptionEnabled(@_intercepting)
+
+  _intercepting: ->
+    @urlWhitelist.length || @urlBlacklist.length
 
   _blockRequest: (url) ->
     useWhitelist = @urlWhitelist.length > 0
