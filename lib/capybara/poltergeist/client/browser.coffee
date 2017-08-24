@@ -143,10 +143,13 @@ class Poltergeist.Browser
   # so we have to add an attribute to the element to identify it, then remove it
   # afterwards.
   select_file: (page_id, id, files) ->
+    console.log "selecting file"
     node = @node(page_id, id)
-    await @current_command.sendResponse @currentPage.beforeAction(node.id)
-    await @currentPage.uploadFile('[_poltergeist_selected]', files...)
-    await @currentPage.afterAction(node.id)
+    @current_command.sendResponse(
+      @currentPage.beforeAction(node.id).then =>
+        @currentPage.uploadFile('[_poltergeist_selected]', files...).then =>
+          @currentPage.afterAction(node.id)
+    )
 
   select: (page_id, id, value) ->
     @current_command.sendResponse this.node(page_id, id).select(value)

@@ -113,7 +113,7 @@ class Poltergeist.WebPage
     # Intecepting causes the `Referer` header to be lost, therefore
     # we only intercept when black/whitelist are set so we can
     # maintain the headers for now
-    if @_intercepting
+    if @_intercepting()
       if @_blockRequest(request.url)
         @_networkTraffic[request._requestId].blocked = true
         @_blockedUrls.push request.url unless request.url in @_blockedUrls
@@ -178,8 +178,8 @@ class Poltergeist.WebPage
     @frames[@frames.length-1] || @native().mainFrame()
 
   uploadFile: (selector, file_paths...)->
-    @currentFrame().$(selector).then (eh)->
-      eh.uploadFile(file_paths...)
+    eh = await @currentFrame().$(selector)
+    await eh.uploadFile(file_paths...)
 
   windowName: ->
     @native().windowName
@@ -481,11 +481,11 @@ class Poltergeist.WebPage
 
   setBlacklist: (bl)->
     @urlBlacklist = bl
-    await @native().setRequestInterceptionEnabled(@_intercepting)
+    await @native().setRequestInterceptionEnabled(@_intercepting())
 
   setWhitelist: (bl)->
     @urlWhitelist = bl
-    await @native().setRequestInterceptionEnabled(@_intercepting)
+    await @native().setRequestInterceptionEnabled(@_intercepting())
 
   _intercepting: ->
     @urlWhitelist.length || @urlBlacklist.length

@@ -204,7 +204,7 @@ describe Capybara::Session do
         expect(@session.find(:css, '#changes_on_keyup').text).to eq('6')
       end
 
-      it 'fires the keypress event', :set_fails, :tw do
+      it 'fires the keypress event', :set_fails do
         expect(@session.find(:css, '#changes_on_keypress').text).to eq('6')
       end
 
