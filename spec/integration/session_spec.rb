@@ -13,7 +13,7 @@ describe Capybara::Session do
     end
 
     describe Capybara::Poltergeist::Node do
-      it 'raises an error if the element has been removed from the DOM', :fails do
+      it 'raises an error if the element has been removed from the DOM' do
         @session.visit('/poltergeist/with_js')
         node = @session.find(:css, '#remove_me')
         expect(node.text).to eq('Remove me')
@@ -21,10 +21,11 @@ describe Capybara::Session do
         expect { node.text }.to raise_error(Capybara::Poltergeist::ObsoleteNode)
       end
 
-      it 'raises an error if the element was on a previous page', :ffails do
+      it 'raises an error if the element was on a previous page' do
         @session.visit('/poltergeist/index')
         node = @session.find('.//a')
         @session.execute_script "window.location = 'about:blank'"
+        sleep 0.1 # allow the window time to load new location
         expect { node.text }.to raise_error(Capybara::Poltergeist::ObsoleteNode)
       end
 
@@ -93,7 +94,7 @@ describe Capybara::Session do
             Poltergeist::SpecHelper.set_capybara_wait_time(1)
           end
 
-          it 'clicks properly', :fails do
+          it 'clicks properly' do
             expect { @session.click_link 'O hai' }.to_not raise_error
           end
 
@@ -236,7 +237,7 @@ describe Capybara::Session do
         expect(element.value).to eq('$52.00')
       end
 
-      it 'attaches a file when passed a Pathname', :tw do
+      it 'attaches a file when passed a Pathname' do
         filename = Pathname.new('spec/tmp/a_test_pathname').expand_path
         File.open(filename, 'w') { |f| f.write('text') }
 
@@ -537,7 +538,7 @@ describe Capybara::Session do
       expect(@session.find(:css, '#break').text).to eq('Foo Bar')
     end
 
-    it 'handles hash changes', :fails do
+    it 'handles hash changes' do
       @session.visit '/#omg'
       expect(@session.current_url).to match(/\/#omg$/)
       @session.execute_script <<-JS
@@ -577,7 +578,8 @@ describe Capybara::Session do
         @session.visit '/poltergeist/drag'
       end
 
-      it 'supports drag_to', :ffails do
+      it 'supports drag_to', :ffails, :tw do
+        byebug
         draggable = @session.find(:css, '#drag_to #draggable')
         droppable = @session.find(:css, '#drag_to #droppable')
 
@@ -644,7 +646,7 @@ describe Capybara::Session do
       end
     end
 
-    xcontext 'frame support', :fails do
+    xcontext 'frame support' do
       it 'supports selection by index' do
         @session.visit '/poltergeist/frames'
 
@@ -664,12 +666,11 @@ describe Capybara::Session do
         end
       end
 
-      it 'supports selection by element without name or id', :ffails2 do
+      it 'supports selection by element without name or id', :ffails do
         @session.visit '/poltergeist/frames'
         frame = @session.find(:css, 'iframe:not([name]):not([id])')
 
         @session.within_frame(frame) do
-          # expect(@session.current_path).to eq('/poltergeist/headers')
           expect(@session).to have_current_path('/poltergeist/headers', wait: 5)
         end
       end
@@ -924,12 +925,14 @@ describe Capybara::Session do
       end
     end
 
+    # setting require: [:modals] here sets the retry time to 1 second
     context 'modals', requires: [:modals] do
       before do
         @session.visit '/poltergeist/with_js'
       end
 
-      it 'matches on partial strings', :ffails do
+      it 'matches on partial strings' do
+        pending "There are some strange issues with character encoding"
         expect {
           @session.accept_confirm '[reg.exp] (chara©+er$)' do
             @session.click_link('Open for match')
@@ -938,7 +941,7 @@ describe Capybara::Session do
         expect(@session).to have_xpath("//a[@id='open-match' and @confirmed='true']")
       end
 
-      it 'matches on regular expressions', :fails , :modal_fails do
+      it 'matches on regular expressions' do
         expect {
           @session.accept_confirm(/^.t.ext.*\[\w{3}\.\w{3}\]/i) do
             @session.click_link('Open for match')
@@ -947,7 +950,7 @@ describe Capybara::Session do
         expect(@session).to have_xpath("//a[@id='open-match' and @confirmed='true']")
       end
 
-      it 'works with nested modals', :ffails, :modal_fails do
+      it 'works with nested modals' do
         expect {
           @session.dismiss_confirm 'Are you really sure?' do
             @session.accept_confirm 'Are you sure?' do
@@ -959,7 +962,7 @@ describe Capybara::Session do
       end
     end
 
-    it "can go back when history state has been pushed", :ffails do
+    it "can go back when history state has been pushed" do
       @session.visit('/')
       @session.execute_script('window.history.pushState({foo: "bar"}, "title", "bar2.html");')
       expect(@session).to have_current_path('/bar2.html')
@@ -967,7 +970,7 @@ describe Capybara::Session do
       expect(@session).to have_current_path('/')
     end
 
-    it "can go forward when history state is used", :ffails do
+    it "can go forward when history state is used" do
       @session.visit('/')
       @session.execute_script('window.history.pushState({foo: "bar"}, "title", "bar2.html");')
       expect(@session).to have_current_path('/bar2.html')

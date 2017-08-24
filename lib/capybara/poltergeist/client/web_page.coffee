@@ -219,8 +219,6 @@ class Poltergeist.WebPage
     return true
 
   networkTraffic: (type) ->
-    console.log "traffic is"
-    console.dir @_networkTraffic
     requests = switch type
       when 'all'
         request for own id, request of @_networkTraffic
@@ -317,9 +315,7 @@ class Poltergeist.WebPage
       @setUserAgent(@_customHeaders['User-Agent'])
     else
       Promise.resolve()).then =>
-        map = new Map()
-        map.set(name, value) for name, value of headers
-        @native().setExtraHTTPHeaders(map)
+        @native().setExtraHTTPHeaders(new Map(Object.entries(headers)))
 
   addTempHeader: (header) ->
     for name, value of header
@@ -335,13 +331,13 @@ class Poltergeist.WebPage
     allHeaders = @getCustomHeaders()
     for name, value of @_tempHeadersToRemoveOnRedirect
       delete allHeaders[name]
-    @setCustomHeaders(allHeaders)
+    await @setCustomHeaders(allHeaders)
 
   removeTempHeaders: ->
     allHeaders = @getCustomHeaders()
     for name, value of @_tempHeaders
       delete allHeaders[name]
-    @setCustomHeaders(allHeaders)
+    await @setCustomHeaders(allHeaders)
 
   pushFrame: (name) ->
     new_frame = (frame for frame in @currentFrame().childFrames() when frame.name() == name)[0]
@@ -386,10 +382,8 @@ class Poltergeist.WebPage
       when 'dblclick'
         @native().mouse.click(x,y, clickCount: 2)
       when 'mousedown'
-        # console.log "moving to #{x}, #{y} then downing mouse"
         @native().mouse.move(x,y).then => @native().mouse.down
       when 'mouseup'
-        # console.log "moving to #{x}, #{y} then uping mouse"
         @native().mouse.move(x,y).then => @native().mouse.up
       else
         throw "Unknown mouse event #{name}"

@@ -84,6 +84,7 @@ class Poltergeist.Browser
         "Timed out with the following resources still waiting #{resources.join(',')}"
       else
         "Request blocked or timed out with no open resource requests"
+      console.log "returning status fail error #{url} : #{msg}}"
       command.sendError(new Poltergeist.StatusFailError(url,msg))
     return
 
@@ -482,20 +483,20 @@ class Poltergeist.Browser
     @current_command.sendResponse(@currentPage.getCustomHeaders())
 
   set_headers: (headers) ->
-    @currentPage.setCustomHeaders(headers).then =>
-      @current_command.sendResponse(true)
+    await @currentPage.setCustomHeaders(headers)
+    @current_command.sendResponse(true)
 
   add_headers: (headers) ->
     allHeaders = @currentPage.getCustomHeaders()
     for name, value of headers
       allHeaders[name] = value
-    this.set_headers(allHeaders)
+    await @set_headers(allHeaders)
 
   add_header: (header, { permanent = true }) ->
     unless permanent == true
       @currentPage.addTempHeader(header)
       @currentPage.addTempHeaderToRemoveOnRedirect(header) if permanent == "no_redirect"
-    this.add_headers(header)
+    await @add_headers(header)
 
   response_headers: ->
     @current_command.sendResponse(@currentPage.responseHeaders())
@@ -536,7 +537,7 @@ class Poltergeist.Browser
     @current_command.sendResponse(true)
 
   exit: ->
-    @browser.close()
+    await @browser.close()
 
   noop: ->
     # NOOOOOOP!
@@ -546,16 +547,22 @@ class Poltergeist.Browser
     throw new Error('zomg')
 
   go_back: ->
-    @currentPage.state = 'wait_for_loading'
-    @currentPage.goBack().then => @_waitForHistoryChange()
+    response = await @currentPage.goBack
+      waitUntil: 'networkidle'
+      networkIdleTimeout: 150
+    @current_command.sendResponse(response?)
 
   go_forward: ->
-    @currentPage.state = 'wait_for_loading'
-    @currentPage.goForward().then => @_waitForHistoryChange()
+    response = await @currentPage.goForward
+      waitUntil: 'networkidle'
+      networkIdleTimeout: 150
+    @current_command.sendResponse(response?)
 
   refresh: ->
-    @currentPage.state = 'wait_for_loading'
-    @currentPage.reload().then => @_waitForHistoryChange()
+    response = await @currentPage.reload
+      # waitUntil: 'networkidle'
+      # networkIdleTimeout: 150
+    @current_command.sendResponse(response?)
 
   set_url_whitelist: (wildcards...)->
     @currentPage.setWhitelist(@_wildcardToRegexp(wc) for wc in wildcards)

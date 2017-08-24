@@ -79,8 +79,7 @@ module Capybara::Poltergeist
       end
     end
 
-    it 'raises an error and restarts the client if the client dies while executing a command' do
-      skip "need to fix"
+    it 'raises an error and restarts the client if the client dies while executing a command', :ffails do
       expect { @driver.browser.command('exit') }.to raise_error(DeadClient)
       @session.visit('/')
       expect(@driver.html).to include('Hello world')
@@ -369,7 +368,7 @@ module Capybara::Poltergeist
     end
 
     context 'setting headers' do
-      it 'allows headers to be set', :ffails do
+      it 'allows headers to be set' do
         @driver.headers = {
           'Cookie' => 'foo=bar',
           'Host' => 'foo.com'
@@ -606,7 +605,8 @@ module Capybara::Poltergeist
         expect { @session.visit("http://nope:#{@port}/") }.to raise_error(StatusFailError)
       end
 
-      it 'has a descriptive message when DNS incorrect', :ffails do
+      it 'has a descriptive message when DNS incorrect' do
+        pending "This will be fixed when the open requests are fixed"
         url = "http://nope:#{@port}/"
         expect {
           @session.visit(url)
@@ -1353,7 +1353,7 @@ module Capybara::Poltergeist
         expect(@session.find(:css, '#key-events-output')).to have_text("keydown:91 keydown:90", count: 2)
       end
 
-      it 'supports Capybara specified numpad keys', :fails do
+      it 'supports Capybara specified numpad keys', :ffails do
         pending "Not sure this is possible in Puppeteer"
         input = @session.find(:css, '#empty_input')
         input.send_keys(:numpad2, :numpad8, :divide, :decimal)
@@ -1361,6 +1361,7 @@ module Capybara::Poltergeist
       end
 
       it 'raises error for unknown keys', :ffails do
+        pending "Is this possible?"
         input = @session.find(:css, '#empty_input')
         expect {
           input.send_keys('abc', :blah)
