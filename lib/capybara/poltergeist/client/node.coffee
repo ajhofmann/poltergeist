@@ -51,22 +51,21 @@ class Poltergeist.Node
     test = await @mouseEventTest(pos.x, pos.y)
     if test.status == 'success'
       if name == 'rightclick'
-        @page.mouseEvent('click', pos.x, pos.y, 'right')
+        @page.mouseEvent('click', pos, 'right')
         this.trigger('contextmenu')
       else
-        @page.mouseEvent(name, pos.x, pos.y)
+        @page.mouseEvent(name, pos)
       pos
     else
       Promise.reject(new Poltergeist.MouseEventFailed(name, test.selector, pos))
 
   dragTo: (other) ->
     await @scrollIntoView()
-    Promise.all([@mouseEventPosition(),other.mouseEventPosition()]).then (positions)=>
-      @page.mouseEvent('mousedown', positions[0].x, positions[0].y).then =>
-        return new Promise((resolve)->
-           setTimeout(resolve, 100)
-        ).then =>
-          @page.mouseEvent('mouseup', positions[1].x, positions[1].y).then
+    pos       = await @mouseEventPosition()
+    other_pos = await other.mouseEventPosition()
+    await @page.mouseEvent('mousedown', pos)
+    await new Promise((resolve)-> setTimeout(resolve, 200));
+    await @page.mouseEvent('mouseup', other_pos)
 
   dragBy: (x, y) ->
     await @scrollIntoView()
@@ -75,8 +74,8 @@ class Poltergeist.Node
       x: position.x + x
       y: position.y + y
 
-    @page.mouseEvent('mousedown', position.x, position.y).then =>
-      @page.mouseEvent('mouseup', final_pos.x, final_pos.y)
+    @page.mouseEvent('mousedown', position).then =>
+      @page.mouseEvent('mouseup', final_pos)
 
   isEqual: (other) ->
     @page == other.page && this.isDOMEqual(other.id)

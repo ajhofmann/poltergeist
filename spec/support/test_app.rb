@@ -25,11 +25,11 @@ class TestApp
   end
 
   get '/poltergeist/jquery.min.js' do
-    send_file "#{POLTERGEIST_PUBLIC}/jquery-1.11.3.min.js"
+    send_file "#{POLTERGEIST_PUBLIC}/jquery-3.2.1.min.js"
   end
 
   get '/poltergeist/jquery-ui.min.js' do
-    send_file "#{POLTERGEIST_PUBLIC}/jquery-ui-1.11.4.min.js"
+    send_file "#{POLTERGEIST_PUBLIC}/jquery-ui-1.12.1.min.js"
   end
 
   get '/poltergeist/unexist.png' do

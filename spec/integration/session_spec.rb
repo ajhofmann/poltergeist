@@ -578,8 +578,7 @@ describe Capybara::Session do
         @session.visit '/poltergeist/drag'
       end
 
-      it 'supports drag_to', :ffails, :tw do
-        byebug
+      it 'supports drag_to' do
         draggable = @session.find(:css, '#drag_to #draggable')
         droppable = @session.find(:css, '#drag_to #droppable')
 
@@ -587,7 +586,7 @@ describe Capybara::Session do
         expect( droppable ).to have_content( "Dropped" )
       end
 
-      it 'supports drag_by on native element', :ffails do
+      it 'supports drag_by on native element' do
         draggable = @session.find(:css, '#drag_by .draggable')
 
         top_before = @session.evaluate_script('$("#drag_by .draggable").position().top')

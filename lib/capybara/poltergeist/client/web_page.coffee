@@ -375,19 +375,24 @@ class Poltergeist.WebPage
 
   # Before each mouse event we make sure that the mouse is moved to where the
   # event will take place. This deals with e.g. :hover changes.
-  mouseEvent: (name, x, y, button = 'left') ->
+  mouseEvent: (name, position, button = 'left') ->
+    {x,y} = position
     switch name
       when 'click'
         @native().mouse.click(x,y)
       when 'dblclick'
         @native().mouse.click(x,y, clickCount: 2)
       when 'mousedown'
-        @native().mouse.move(x,y).then => @native().mouse.down
+        @native().mouse.move(x,y).then => @native().mouse.down()
       when 'mouseup'
-        @native().mouse.move(x,y).then => @native().mouse.up
+        @native().mouse.move(x,y).then => @native().mouse.up()
       else
         throw "Unknown mouse event #{name}"
 
+  # mouseDrag: (name, from, to)
+  #   mouse = @native().mouse
+  #   mouse.move(from.x, from.y).then => mouse.down()
+  #
   evaluate: (fn, args...) ->
     fn_args = (JSON.stringify(arg) for arg in [@id, args...])
     wrapped_fn = "(function() {
