@@ -507,8 +507,7 @@ class Poltergeist.Browser
   # We're using phantom.addCookie so that cookies can be set
   # before the first page load has taken place.
   set_cookie: (cookie) ->
-    throw "implement set_cookie"
-    phantom.addCookie(cookie)
+    @currentPage.setCookie(cookie)
     @current_command.sendResponse(true)
 
   remove_cookie: (name) ->
@@ -516,7 +515,7 @@ class Poltergeist.Browser
     @current_command.sendResponse(true)
 
   clear_cookies: () ->
-    phantom.clearCookies()
+    @currentPage.clearCookies()
     @current_command.sendResponse(true)
 
   cookies_enabled: (flag) ->

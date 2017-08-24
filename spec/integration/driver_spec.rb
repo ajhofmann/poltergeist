@@ -368,7 +368,7 @@ module Capybara::Poltergeist
     end
 
     context 'setting headers' do
-      it 'allows headers to be set' do
+      it 'allows headers to be set', :tw do
         @driver.headers = {
           'Cookie' => 'foo=bar',
           'Host' => 'foo.com'
@@ -763,10 +763,9 @@ module Capybara::Poltergeist
       end
     end
 
-    xcontext 'cookies support' do
+    context 'cookies support' do
       it 'returns set cookies' do
         @session.visit('/set_cookie')
-
         cookie = @driver.cookies['capybara']
         expect(cookie.name).to eq('capybara')
         expect(cookie.value).to eq('test_cookie')
@@ -774,6 +773,7 @@ module Capybara::Poltergeist
         expect(cookie.path).to eq('/')
         expect(cookie.secure?).to be false
         expect(cookie.httponly?).to be false
+        expect(cookie.httpOnly?).to be false
         expect(cookie.samesite).to be_nil
         expect(cookie.expires).to be_nil
       end
@@ -785,13 +785,13 @@ module Capybara::Poltergeist
       end
 
       it 'can set cookies with custom settings' do
-        @driver.set_cookie 'capybara', 'omg', path: '/poltergeist'
+        @driver.set_cookie 'capybara', 'wow', path: '/poltergeist'
 
         @session.visit('/get_cookie')
-        expect(@driver.body).to_not include('omg')
+        expect(@driver.body).to_not include('wow')
 
         @session.visit('/poltergeist/get_cookie')
-        expect(@driver.body).to include('omg')
+        expect(@driver.body).to include('wow')
 
         expect(@driver.cookies['capybara'].path).to eq('/poltergeist')
       end
@@ -840,6 +840,7 @@ module Capybara::Poltergeist
       end
 
       it 'can enable and disable cookies' do
+        skip "Implement this"
         @driver.cookies_enabled = false
         @session.visit('/set_cookie')
         expect(@driver.cookies).to be_empty

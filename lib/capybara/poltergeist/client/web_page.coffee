@@ -265,10 +265,17 @@ class Poltergeist.WebPage
     headers
 
   cookies: ->
-    @currentFrame().cookies
+    await @native().cookies()
 
-  deleteCookie: (name) ->
-    @currentFrame().deleteCookie(name)
+  setCookie: (cookies...)->
+    await @native().setCookie(cookies...)
+
+  deleteCookie: (names...) ->
+    await @native().deleteCookie(({name: name} for name in names)...)
+
+  clearCookies: ->
+    # await @native().deleteCookie({})
+    await @native()._client.send('Network.clearBrowserCookies');
 
   viewportSize: ->
     @native().viewport()

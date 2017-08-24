@@ -24,16 +24,24 @@ module Capybara::Poltergeist
       @attributes['secure']
     end
 
+    def httpOnly?
+      @attributes['httpOnly']
+    end
+
     def httponly?
-      @attributes['httponly']
+      httpOnly?
+    end
+
+    def sameSite
+      @attributes['sameSite']
     end
 
     def samesite
-      @attributes['samesite']
+      sameSite
     end
 
     def expires
-      Time.at @attributes['expiry'] if @attributes['expiry']
+      Time.at @attributes['expires'] unless [nil, 0].include? @attributes['expires']
     end
   end
 end
